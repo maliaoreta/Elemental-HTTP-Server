@@ -20,8 +20,9 @@ var server = http.createServer(function (req, res) {
       res.end();
     });
   }
-  else if (reqMethod === 'POST') {
-    
+  
+  else if (reqMethod === 'POST' && uri === '/elements' || reqMethod === 'PUT') {
+       
     req.on('data', function (data) {
 
       postBody = data.toString();
@@ -30,7 +31,7 @@ var server = http.createServer(function (req, res) {
     req.on('end', function () {
 
       postBody = qs.parse(postBody);
-      validatePostForm(res, function (err, res) {
+      validateForm(res, function (err, res) {
 
         if (err) {
 
@@ -39,8 +40,28 @@ var server = http.createServer(function (req, res) {
           res.end();
           return;
         }
-        
-        createElementFile(res);
+
+        if (reqMethod === 'POST') {
+
+          createElementFile(res, null);
+        }
+
+        else {
+          
+          fs.readFile('public' + uri, function (err, fileData) {
+
+            if (err) {
+
+              res.writeHead(500, {'Content-Type': 'appication/json'});
+              res.write('{error: resource ' + uri + ' does not exist}');
+              res.end();
+            }
+
+            var updatedElement = uri.slice(1, uri.indexOf('.'));
+          
+            createElementFile(res, updatedElement);
+          });
+        };
       });
     });
   };
@@ -59,7 +80,19 @@ function redirectTo404 (res) {
   });
 };
 
-function createElementFile (res) {
+function createElementFile (res, updatedElement) {
+
+  var path;
+
+  if (updatedElement !== null) {
+    
+    path = updatedElement;
+  }
+  else {
+
+    path = postBody.elementName.toLowerCase();
+    updateIndex();
+  }
   
   fs.readFile('./elementTemplate.html', function (err, fileData) {
 
@@ -68,8 +101,9 @@ function createElementFile (res) {
     fileData = fileData.replace('symbol', postBody.elementSymbol);
     fileData = fileData.replace('atomicNum', postBody.elementAtomicNumber);
     fileData = fileData.replace('description', postBody.elementDescription);
+    fileData = fileData.replace('Element Template', 'The Elements - ' + postBody.elementName);
 
-    var elementFile = fs.createWriteStream('./public/' + postBody.elementName.toLowerCase() + '.html', {encoding: 'utf8'});
+    var elementFile = fs.createWriteStream('./public/' + path + '.html', {encoding: 'utf8'});
     elementFile.write(fileData);
     elementFile.end();
   });
@@ -78,8 +112,6 @@ function createElementFile (res) {
   res.writeHead(200, {'Content-Type' : 'appication/json'});
   res.write('{success: true}');
   res.end();
-
-  updateIndex();
 };
 
 function updateIndex () {
@@ -87,7 +119,7 @@ function updateIndex () {
   fs.readFile('./public/index.html', function (err, fileData) {
 
     fileData = fileData.toString();
-    var linkToNewElement = '  <li>\n      <a href=\"/' + postBody.elementName.toLowerCase() + '\">' + postBody.elementName + '</a>\n    </li>\n  </ol>';
+    var linkToNewElement = '  <li>\n      <a href=\"/' + postBody.elementName.toLowerCase() + '.html\">' + postBody.elementName + '</a>\n    </li>\n  </ol>';
 
     fileData = fileData.replace('</ol>', linkToNewElement);
 
@@ -97,7 +129,7 @@ function updateIndex () {
   });
 };
 
-function validatePostForm (res, cb) {
+function validateForm (res, cb) {
 
   var errMsg = 'Error! The required form fields are: elementName, elementSymbol, elementAtomicNumber, and elementDescription.';
   var requiredFields = ['elementName', 'elementSymbol', 'elementAtomicNumber', 'elementDescription'];
@@ -112,4 +144,4 @@ function validatePostForm (res, cb) {
   }
 
   return cb(null, res);
- };
+};
