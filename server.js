@@ -5,6 +5,18 @@ var postBody = '';
 
 var server = http.createServer(function (req, res) {
 
+  var encodedString = req.rawHeaders[req.rawHeaders.indexOf('Authorization')+1].replace('Basic ', '');
+  var base64Buffer = new Buffer(encodedString, 'base64');
+  var decodedString = base64Buffer.toString();
+  
+  if (decodedString !== 'elementalServer:plsaccept'){
+
+    res.writeHead(401, {'WWW-Authenticate':'Basic realm = \"Secure Area\"'});
+    res.write('<html><body>Not Authorized</body></html>');
+    res.end();
+    return;
+  };
+
   var uri = req.url;
   var reqMethod = req.method;
 
@@ -21,7 +33,7 @@ var server = http.createServer(function (req, res) {
     });
   }
   
-  else if (reqMethod === 'POST' && uri === '/elements' || reqMethod === 'PUT') {
+  else if (reqMethod === 'POST' || reqMethod === 'PUT') {
        
     req.on('data', function (data) {
 
@@ -43,6 +55,14 @@ var server = http.createServer(function (req, res) {
 
         if (reqMethod === 'POST') {
 
+          if (uri !== '/elements') {
+
+            res.statusCode = 501;
+            res.write('Incorrect URL! To post, please use /elements');
+            res.end();
+            return;
+          }
+          
           createElementFile(res, null);
         }
 
@@ -52,9 +72,7 @@ var server = http.createServer(function (req, res) {
 
             if (err) {
 
-              res.writeHead(500, {'Content-Type': 'appication/json'});
-              res.write('{error: resource ' + uri + ' does not exist}');
-              res.end();
+              return error500(res, uri);
             }
 
             var updatedElement = uri.slice(1, uri.indexOf('.'));
@@ -63,6 +81,25 @@ var server = http.createServer(function (req, res) {
           });
         };
       });
+    });
+  }
+
+  else if (reqMethod === 'DELETE') {
+
+    fs.readFile('public' + uri, function (err, fileData) {
+
+      if (err) {
+
+        return error500(res, uri);
+      }
+
+      fs.unlink('public' + uri);
+        res.writeHead(200, {'Content-Type' : 'appication/json'});
+        res.write('{"Success" : true}');
+        res.end();
+
+        var elementName = uri.slice(1, uri.indexOf('.'));
+        updateIndex(elementName, true);
     });
   };
 });
@@ -91,7 +128,7 @@ function createElementFile (res, updatedElement) {
   else {
 
     path = postBody.elementName.toLowerCase();
-    updateIndex();
+    updateIndex(path, null);
   }
   
   fs.readFile('./elementTemplate.html', function (err, fileData) {
@@ -110,18 +147,26 @@ function createElementFile (res, updatedElement) {
 
 
   res.writeHead(200, {'Content-Type' : 'appication/json'});
-  res.write('{success: true}');
+  res.write('{"Success" : true}');
   res.end();
 };
 
-function updateIndex () {
+function updateIndex (path, updateDeleted) {
 
   fs.readFile('./public/index.html', function (err, fileData) {
 
-    fileData = fileData.toString();
-    var linkToNewElement = '  <li>\n      <a href=\"/' + postBody.elementName.toLowerCase() + '.html\">' + postBody.elementName + '</a>\n    </li>\n  </ol>';
+    var capElementName = path.charAt(0).toUpperCase() + path.slice(1);
 
-    fileData = fileData.replace('</ol>', linkToNewElement);
+    fileData = fileData.toString();
+    var linkToNewElement = '  <li>\n      <a href=\"/' + path + '.html\">' + capElementName + '</a>\n    </li>\n  </ol>';
+
+    if (updateDeleted === null && fileData.includes(linkToNewElement) === false) {
+
+      fileData = fileData.replace('</ol>', linkToNewElement);
+    }
+    else if (updateDeleted === true) {
+      fileData = fileData.replace(linkToNewElement, '</ol>');
+    }
 
     var updatedIndex = fs.createWriteStream('./public/index.html', {encoding: 'utf8'});
     updatedIndex.write(fileData);
@@ -145,3 +190,10 @@ function validateForm (res, cb) {
 
   return cb(null, res);
 };
+
+function error500 (res, uri) {
+
+  res.writeHead(500, {'Content-Type': 'appication/json'});
+  res.write('{error: resource ' + uri + ' does not exist}');
+  res.end();
+}
