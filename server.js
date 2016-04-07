@@ -29,7 +29,19 @@ var server = http.createServer(function (req, res) {
 
     req.on('end', function () {
 
-      createElementFile(res);
+      postBody = qs.parse(postBody);
+      validatePostForm(res, function (err, res) {
+
+        if (err) {
+
+          res.statusCode = 404;
+          res.write(err);
+          res.end();
+          return;
+        }
+        
+        createElementFile(res);
+      });
     });
   };
 });
@@ -49,8 +61,6 @@ function redirectTo404 (res) {
 
 function createElementFile (res) {
   
-  postBody = qs.parse(postBody);
-
   fs.readFile('./elementTemplate.html', function (err, fileData) {
 
     fileData = fileData.toString();
@@ -63,6 +73,7 @@ function createElementFile (res) {
     elementFile.write(fileData);
     elementFile.end();
   });
+
 
   res.writeHead(200, {'Content-Type' : 'appication/json'});
   res.write('{success: true}');
@@ -79,5 +90,26 @@ function updateIndex () {
     var linkToNewElement = '  <li>\n      <a href=\"/' + postBody.elementName.toLowerCase() + '\">' + postBody.elementName + '</a>\n    </li>\n  </ol>';
 
     fileData = fileData.replace('</ol>', linkToNewElement);
+
+    var updatedIndex = fs.createWriteStream('./public/index.html', {encoding: 'utf8'});
+    updatedIndex.write(fileData);
+    updatedIndex.end();
   });
 };
+
+function validatePostForm (res, cb) {
+
+  var errMsg = 'Error! The required form fields are: elementName, elementSymbol, elementAtomicNumber, and elementDescription.';
+  var requiredFields = ['elementName', 'elementSymbol', 'elementAtomicNumber', 'elementDescription'];
+  var valid = true;
+
+  for (var i = 0; i < requiredFields.length; i++) {
+
+    if (!postBody.hasOwnProperty(requiredFields[i])) {
+
+      return cb(errMsg, res);
+    }
+  }
+
+  return cb(null, res);
+ };
