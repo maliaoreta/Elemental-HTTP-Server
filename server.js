@@ -25,5 +25,9 @@ var server = http.createServer(function (req, res) {
     case 'DELETE':
       return Handlers.Delete(res, uri);
       break;
+    default:
+      res.statusCode = 501;
+      res.end('Available methods: GET, POST, PUT, DELETE.');
+      return;
   };
 }).listen({port: 8080});
