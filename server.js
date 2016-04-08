@@ -26,6 +26,4 @@ var server = http.createServer(function (req, res) {
       return Handlers.Delete(res, uri);
       break;
   };
-});
-
-server.listen({port: 8080});
+}).listen({port: 8080});
